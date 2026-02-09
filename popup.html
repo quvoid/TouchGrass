@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reality Check</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>TouchGrass 🌱</h1>
+            <div id="shame-title-container">
+                <span id="shame-badge">Calculating...</span>
+            </div>
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="personal">My Stats</button>
+                <button class="tab-btn" data-tab="global">Leaderboard</button>
+            </div>
+        </header>
+
+        <main>
+            <div id="personal-tab" class="tab-content active">
+                <div id="stats-container">
+                    <h2>Time Wasted Today</h2>
+                    <ul id="site-list">
+                        <li class="loading">Calculating...</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div id="global-tab" class="tab-content">
+                <div id="leaderboard-container">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <h2>Global Rankings</h2>
+                        <button id="sync-btn" style="padding:2px 8px; font-size:10px;">↻ Sync</button>
+                    </div>
+                    <ul id="leaderboard-list">
+                        <!-- Mock data injected here -->
+                    </ul>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <button id="test-roast-btn" style="margin-right: 10px; background: #00ff41; color: #000;">Test
+                Roast</button>
+            <button id="reset-btn">Reset Stats</button>
+        </footer>
+    </div>
+    <script src="config.js"></script>
+    <script src="backend_config.js"></script>
+    <script src="popup.js"></script>
+</body>
+
+</html>

@@ -272,7 +272,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (testRoastBtn) {
         testRoastBtn.onclick = async () => {
             testRoastBtn.innerText = "...";
-
             try {
                 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
                 if (tab) {
@@ -322,6 +321,58 @@ document.addEventListener('DOMContentLoaded', async () => {
                 console.error(e);
                 testRoastBtn.innerText = "Error";
                 setTimeout(() => testRoastBtn.innerText = "⚡ Roast Me", 2000);
+            }
+        };
+    }
+
+    // --- TEST DAD ---
+    const testDadBtn = document.getElementById('test-dad-btn');
+    if (testDadBtn) {
+        testDadBtn.onclick = async () => {
+            testDadBtn.innerText = "...";
+            try {
+                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                if (tab) {
+                    if (tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) {
+                        alert("Can't spawn Dad on browser pages.");
+                        testDadBtn.innerText = "🧔";
+                        return;
+                    }
+
+                    try {
+                        await chrome.tabs.sendMessage(tab.id, { action: "SPAWN_DAD" });
+                        testDadBtn.innerText = "Sent!";
+                        setTimeout(() => testDadBtn.innerText = "🧔", 2000);
+                    } catch (err) {
+                        try {
+                            await chrome.scripting.executeScript({
+                                target: { tabId: tab.id },
+                                files: ['content.js']
+                            });
+                            await chrome.scripting.insertCSS({
+                                target: { tabId: tab.id },
+                                files: ['content.css']
+                            });
+
+                            setTimeout(async () => {
+                                try {
+                                    await chrome.tabs.sendMessage(tab.id, { action: "SPAWN_DAD" });
+                                    testDadBtn.innerText = "Sent!";
+                                } catch (retryErr) {
+                                    testDadBtn.innerText = "Failed";
+                                }
+                                setTimeout(() => testDadBtn.innerText = "🧔", 2000);
+                            }, 500);
+                        } catch (injectErr) {
+                            testDadBtn.innerText = "Failed";
+                            setTimeout(() => testDadBtn.innerText = "🧔", 2000);
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error(e);
+                testDadBtn.innerText = "Error";
+                setTimeout(() => testDadBtn.innerText = "🧔", 2000);
             }
         };
     }

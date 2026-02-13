@@ -187,27 +187,37 @@ async function checkRoast(hostname, totalTime) {
         // Trigger Roast
         console.log("ROASTING!");
 
-        let roasts = [
-            "You came here to work.",
-            "This is your 7th YouTube video.",
-            "Productivity is calling...",
-            "Are you proud of this?",
-            "Tick tock. Tick tock."
-        ];
+        // 30% Chance to Spawn Disappointed Dad
+        if (Math.random() < 0.3) {
+            if (activeTabId) {
+                chrome.tabs.sendMessage(activeTabId, {
+                    action: "SPAWN_DAD"
+                }).catch(err => console.log("Tab closed or no content script:", err));
+            }
+        } else {
+            // Standard Text Roast
+            let roasts = [
+                "You came here to work.",
+                "This is your 7th YouTube video.",
+                "Productivity is calling...",
+                "Are you proud of this?",
+                "Tick tock. Tick tock."
+            ];
 
-        // Use imported roasts if available
-        if (typeof ROASTS !== 'undefined' && Array.isArray(ROASTS)) {
-            roasts = ROASTS;
-        }
+            // Use imported roasts if available
+            if (typeof ROASTS !== 'undefined' && Array.isArray(ROASTS)) {
+                roasts = ROASTS;
+            }
 
-        const roast = roasts[Math.floor(Math.random() * roasts.length)];
+            const roast = roasts[Math.floor(Math.random() * roasts.length)];
 
-        // Send to content script
-        if (activeTabId) {
-            chrome.tabs.sendMessage(activeTabId, {
-                action: "ROAST",
-                text: roast
-            }).catch(err => console.log("Tab closed or no content script:", err));
+            // Send to content script
+            if (activeTabId) {
+                chrome.tabs.sendMessage(activeTabId, {
+                    action: "ROAST",
+                    text: roast
+                }).catch(err => console.log("Tab closed or no content script:", err));
+            }
         }
 
         await chrome.storage.local.set({ [lastRoastKey]: now });

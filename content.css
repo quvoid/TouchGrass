@@ -1,21 +1,18 @@
 /* content.css */
+/* ... existing styles ... */
+
 #reality-check-overlay {
     position: fixed !important;
     bottom: 20px !important;
-    /* Bottom */
     right: 20px !important;
-    /* Right */
     width: auto !important;
     height: auto !important;
     background: transparent !important;
-    /* No backdrop */
     z-index: 2147483647 !important;
-    /* Max z-index */
     display: flex !important;
     justify-content: flex-end !important;
     align-items: flex-end !important;
     pointer-events: none;
-    /* Let clicks pass specific areas */
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
     opacity: 1 !important;
     visibility: visible !important;
@@ -25,14 +22,16 @@
     background: #0d0d0d;
     color: #00ff41;
     padding: 20px;
-    border-radius: 8px;
-    /* Softer corners */
+    border-radius: 0 !important;
+    /* Sharp */
     text-align: left;
     border: 1px solid #00ff41;
-    box-shadow: 0 0 20px rgba(0, 255, 65, 0.4);
+    box-shadow: 8px 8px 0 rgba(0, 0, 0, 0.8);
+    /* Brutalist shadow */
     max-width: 350px;
     font-family: 'Courier New', Courier, monospace;
-    animation: slideIn 0.5s cubic-bezier(0.23, 1, 0.32, 1) both;
+    animation: slideIn 0.3s steps(10) both;
+    /* Jerky entry */
     pointer-events: auto;
     display: flex;
     flex-direction: column;
@@ -55,9 +54,9 @@
     font-size: 1.2rem;
     margin: 0;
     color: #00ff41;
-    text-shadow: 0 0 2px #00ff41;
-    text-transform: none;
-    letter-spacing: normal;
+    text-shadow: none;
+    text-transform: uppercase;
+    letter-spacing: 1px;
     line-height: 1.4;
 }
 
@@ -66,63 +65,206 @@
     background: #00ff41;
     color: #000;
     border: none;
-    padding: 6px 12px;
+    padding: 8px 16px;
     font-size: 0.9rem;
-    border-radius: 4px;
+    border-radius: 0 !important;
     cursor: pointer;
     font-weight: bold;
-    font-family: 'Segoe UI', sans-serif;
+    font-family: 'Consolas', monospace;
     text-transform: uppercase;
+    box-shadow: 4px 4px 0 #000;
 }
 
 #reality-check-overlay button:hover {
-    background: #00ff41;
-    color: #000;
-    box-shadow: 0 0 15px #00ff41;
+    transform: translate(2px, 2px);
+    box-shadow: 2px 2px 0 #000;
 }
 
-@keyframes shake {
+/* ============================
+   DISAPPOINTED DAD (Pixel Art)
+   ============================ */
+#touchgrass-dad-container {
+    position: fixed;
+    bottom: 0;
+    left: -100px;
+    /* Start off screen */
+    z-index: 2147483647;
+    pointer-events: none;
+    filter: drop-shadow(4px 4px 0 rgba(0, 0, 0, 0.5));
+    will-change: transform;
+    /* Transition controlled by JS classes */
+    transition: transform 4s linear;
+}
 
-    10%,
-    90% {
-        transform: translate3d(-1px, 0, 0);
+/* The Dad Avatar */
+.pixel-dad {
+    width: 50px;
+    height: 90px;
+    position: relative;
+    transform-origin: bottom center;
+}
+
+/* Head */
+.pixel-dad-head {
+    width: 24px;
+    height: 24px;
+    background: #f1c27d;
+    /* Skin */
+    position: absolute;
+    top: 0;
+    left: 13px;
+    border: 2px solid #000;
+}
+
+/* Hair */
+.pixel-dad-head::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -2px;
+    width: 28px;
+    height: 8px;
+    background: #555;
+    /* Gray hair */
+}
+
+/* Mustache */
+.pixel-dad-head::after {
+    content: '';
+    position: absolute;
+    bottom: 4px;
+    left: 6px;
+    width: 12px;
+    height: 4px;
+    background: #333;
+}
+
+/* Body (Shirt) */
+.pixel-dad-body {
+    width: 30px;
+    height: 36px;
+    background: #5d8aa8;
+    /* Dad shirt blue */
+    position: absolute;
+    top: 24px;
+    left: 10px;
+    border: 2px solid #000;
+}
+
+/* Tie */
+.pixel-dad-body::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 12px;
+    width: 6px;
+    height: 24px;
+    background: #800000;
+    /* Maroon tie */
+}
+
+/* Legs (Pants) */
+.pixel-dad-legs {
+    width: 10px;
+    height: 30px;
+    background: #2b2b2b;
+    /* Dark pants */
+    position: absolute;
+    top: 60px;
+    left: 12px;
+    border: 2px solid #000;
+    box-shadow: 16px 0 0 #2b2b2b, 16px 0 0 0 #000;
+    /* Right leg visual hack */
+    /* Wait, borders complicate box-shadow. Let's just use pseudo for right leg */
+}
+
+.pixel-dad-legs::after {
+    content: '';
+    position: absolute;
+    top: -2px;
+    left: 16px;
+    width: 10px;
+    height: 30px;
+    background: #2b2b2b;
+    border: 2px solid #000;
+}
+
+/* Animation Classes */
+.dad-walking .pixel-dad {
+    animation: dadBob 0.4s infinite alternate;
+}
+
+@keyframes dadBob {
+    from {
+        transform: translateY(0);
     }
 
-    20%,
-    80% {
-        transform: translate3d(2px, 0, 0);
-    }
-
-    30%,
-    50%,
-    70% {
-        transform: translate3d(-4px, 0, 0);
-    }
-
-    40%,
-    60% {
-        transform: translate3d(4px, 0, 0);
+    to {
+        transform: translateY(-4px);
     }
 }
 
-.reality-check-enter {
+/* Head Shake */
+.dad-shaking-head .pixel-dad-head {
+    animation: headShake 1s ease-in-out infinite;
+}
+
+@keyframes headShake {
+
+    0%,
+    100% {
+        transform: rotate(0deg);
+    }
+
+    25% {
+        transform: rotate(-10deg);
+    }
+
+    75% {
+        transform: rotate(10deg);
+    }
+}
+
+/* Speech Bubble */
+#dad-bubble {
+    position: absolute;
+    top: -60px;
+    left: 40px;
+    background: #fff;
+    color: #444;
+    padding: 8px 12px;
+    border: 2px solid #000;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    font-weight: bold;
+    white-space: nowrap;
     opacity: 0;
-    animation: fadeIn 0.3s forwards;
+    transition: opacity 0.3s;
+    box-shadow: 4px 4px 0 #000;
+    pointer-events: none;
 }
 
-.reality-check-exit {
+#dad-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    left: 10px;
+    border-width: 8px 8px 0;
+    border-style: solid;
+    border-color: #000 transparent;
+}
+
+#dad-bubble::before {
+    content: '';
+    position: absolute;
+    bottom: -4px;
+    left: 12px;
+    border-width: 6px 6px 0;
+    border-style: solid;
+    border-color: #fff transparent;
+    z-index: 1;
+}
+
+.dad-visible #dad-bubble {
     opacity: 1;
-    animation: fadeOut 0.3s forwards;
-}
-
-@keyframes fadeIn {
-    to {
-        opacity: 1;
-    }
-}
-
-@keyframes fadeOut {
-    to {
-        opacity: 0;
-    }
 }

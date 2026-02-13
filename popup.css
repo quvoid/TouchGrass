@@ -74,20 +74,24 @@ header h1 span {
 
 /* --- STREAK --- */
 #streak-container {
-    display: flex;
+    display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 6px;
     font-size: 0.65rem;
     font-family: 'Consolas', 'Monaco', monospace;
-    color: #555;
+    color: #888;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    border: 1px solid #222;
+    padding: 2px 6px;
+    background: #0a0a0a;
 }
 
 #streak-count {
-    color: #00ff41;
+    color: #ffaa00;
+    /* Fire orange */
     font-weight: 700;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
 }
 
 /* --- SHAME BADGE --- */
@@ -359,6 +363,19 @@ button:hover {
 #test-roast-btn:hover {
     background: #00cc33;
     border-color: #00cc33;
+}
+
+#test-dad-btn {
+    font-size: 1.2rem;
+    padding: 0;
+    border-color: #5d8aa8;
+    /* Dad shirt blue */
+    color: #5d8aa8;
+}
+
+#test-dad-btn:hover {
+    background: #5d8aa8;
+    color: #000;
 }
 
 #sync-btn {

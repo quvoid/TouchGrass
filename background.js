@@ -9,6 +9,7 @@ try {
 let activeTabId = null;
 let activeTabUrl = null;
 let startTime = null;
+let isWindowFocused = true; // Track if any browser window is focused
 
 // Thresholds for roasts (in seconds for testing, minutes for prod)
 const ROAST_THRESHOLD = 3600; // Roast after 1 hour (3600s)
@@ -28,15 +29,17 @@ function isUnproductive(url) {
     }
 }
 
-// Function to update time spent
+// Function to update time spent — only saves if actively tracking
 async function updateTime() {
     if (activeTabUrl && startTime) {
         const now = Date.now();
         const duration = (now - startTime) / 1000; // in seconds
 
-        // We only track "unproductive" sites for the roast, 
-        // but we could track everything for stats.
-        // For MVP, let's track everything by domain.
+        // Ignore tiny or negative durations (safety check)
+        if (duration <= 0) {
+            startTime = Date.now();
+            return;
+        }
 
         try {
             const hostname = new URL(activeTabUrl).hostname;
@@ -46,7 +49,7 @@ async function updateTime() {
             await chrome.storage.local.set({ [hostname]: currentTotal });
 
             // Log for debugging
-            console.log(`Updated time for ${hostname}: ${currentTotal.toFixed(1)}s`);
+            console.log(`Updated time for ${hostname}: ${currentTotal.toFixed(1)}s (+${duration.toFixed(1)}s)`);
 
             // Check for roast trigger
             if (isUnproductive(activeTabUrl)) {
@@ -57,27 +60,40 @@ async function updateTime() {
             console.error("Error updating time:", e);
         }
     }
-    // Reset start time for next interval if we are continuing
+    // Reset start time for next interval
     startTime = Date.now();
+}
+
+// Pause tracking — saves accumulated time and stops the timer
+async function pauseTracking() {
+    if (activeTabUrl && startTime) {
+        const now = Date.now();
+        const duration = (now - startTime) / 1000;
+
+        if (duration > 0) {
+            try {
+                const hostname = new URL(activeTabUrl).hostname;
+                const data = await chrome.storage.local.get([hostname]);
+                const currentTotal = (data[hostname] || 0) + duration;
+                await chrome.storage.local.set({ [hostname]: currentTotal });
+                console.log(`Paused tracking for ${hostname}: saved ${duration.toFixed(1)}s`);
+            } catch (e) {
+                console.error("Error pausing tracking:", e);
+            }
+        }
+    }
+    // Null out startTime so no more time accumulates
+    startTime = null;
+}
+
+// Resume tracking — starts the timer again
+function resumeTracking() {
+    startTime = Date.now();
+    console.log(`Resumed tracking for ${activeTabUrl}`);
 }
 
 // Check if we should roast the user
 async function checkRoast(hostname, totalTime) {
-    // Simple logic: every X seconds on an unproductive site
-    // In a real app, we might want "session time" vs "total time".
-    // Let's use session time for now (time since tab active).
-
-    // Actually, to make it annoying, let's just use the total time increment.
-    // If totalTime % ROAST_INTERVAL < 5 (allow some buffer), trigger?
-    // Better: use alarms to trigger specific events.
-
-    // Alternate approach: Send a message to content script to check time itself? 
-    // No, background is source of truth.
-
-    // Let's just randomly roast if they are on it for too long.
-    // For MVP: Send a roast every 30 seconds.
-
-    // We need to know if we already roasted recently.
     const lastRoastKey = `${hostname}_last_roast`;
     const data = await chrome.storage.local.get([lastRoastKey]);
     const lastRoast = data[lastRoastKey] || 0;
@@ -87,8 +103,6 @@ async function checkRoast(hostname, totalTime) {
         // Trigger Roast
         console.log("ROASTING!");
 
-        // Pick a random roast
-        // We need the roasts list here. We can fetch it or hardcode a small set if import fails.
         let roasts = [
             "You came here to work.",
             "This is your 7th YouTube video.",
@@ -117,12 +131,11 @@ async function checkRoast(hostname, totalTime) {
 }
 
 
-// Listeners
+// --- TAB CHANGE: user switches tab within same window ---
 chrome.tabs.onActivated.addListener(async (activeInfo) => {
-    await updateTime(); // Save time for previous tab
+    await pauseTracking(); // Save time for previous tab
 
     activeTabId = activeInfo.tabId;
-    startTime = Date.now();
 
     try {
         const tab = await chrome.tabs.get(activeTabId);
@@ -130,33 +143,97 @@ chrome.tabs.onActivated.addListener(async (activeInfo) => {
     } catch (e) {
         activeTabUrl = null;
     }
-});
 
-chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-    if (tabId === activeTabId && changeInfo.url) {
-        await updateTime();
-        activeTabUrl = changeInfo.url;
-        startTime = Date.now();
+    // Only start tracking if the window is focused
+    if (isWindowFocused) {
+        resumeTracking();
     }
 });
 
-// Periodic save (e.g., every 5 seconds) to ensure data isn't lost on crash
+// --- URL CHANGE: user navigates within the same tab ---
+chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
+    if (tabId === activeTabId && changeInfo.url) {
+        await pauseTracking();
+        activeTabUrl = changeInfo.url;
+        if (isWindowFocused) {
+            resumeTracking();
+        }
+    }
+});
+
+// --- WINDOW FOCUS CHANGE: user switches to different window or leaves browser ---
+chrome.windows.onFocusChanged.addListener(async (windowId) => {
+    if (windowId === chrome.windows.WINDOW_ID_NONE) {
+        // User left all Chrome windows (switched to another app)
+        console.log("Browser lost focus — pausing tracking");
+        isWindowFocused = false;
+        await pauseTracking();
+    } else {
+        // User focused a Chrome window — check which tab is active in it
+        isWindowFocused = true;
+
+        try {
+            const tabs = await chrome.tabs.query({ active: true, windowId: windowId });
+            if (tabs && tabs.length > 0) {
+                const focusedTab = tabs[0];
+
+                if (focusedTab.id !== activeTabId) {
+                    // Switched to a different window with a different active tab
+                    await pauseTracking();
+                    activeTabId = focusedTab.id;
+                    activeTabUrl = focusedTab.url;
+                }
+
+                resumeTracking();
+                console.log(`Window focused — tracking ${activeTabUrl}`);
+            }
+        } catch (e) {
+            console.error("Error on window focus change:", e);
+        }
+    }
+});
+
+// --- IDLE STATE: user is away from computer ---
+chrome.idle.onStateChanged.addListener(async (newState) => {
+    if (newState === "active") {
+        console.log("User is active again — resuming tracking");
+        isWindowFocused = true;
+        resumeTracking();
+    } else {
+        // "idle" or "locked"
+        console.log(`User is ${newState} — pausing tracking`);
+        isWindowFocused = false;
+        await pauseTracking();
+    }
+});
+
+// Periodic save (e.g., every 6 seconds) to ensure data isn't lost on crash
 // and to trigger roasts in real-time
 chrome.alarms.create("tracking_heartbeat", { periodInMinutes: 0.1 }); // Every 6s
 chrome.alarms.create("sync_score", { periodInMinutes: 2 }); // Sync to cloud every 2 mins
 
 chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name === "tracking_heartbeat") {
-        if (activeTabId) {
-            // Check if window is focused
-            // Use chrome.windows.get for more reliability or catch errors
+        // Only update time if we are actively tracking (window focused + tab active)
+        if (activeTabId && isWindowFocused && startTime) {
             try {
-                const window = await chrome.windows.getLastFocused();
-                if (window.focused) {
-                    await updateTime();
+                // Double-check: verify the active tab in the focused window matches our tracked tab
+                const focusedWindow = await chrome.windows.getLastFocused();
+                if (focusedWindow.focused) {
+                    const tabs = await chrome.tabs.query({ active: true, windowId: focusedWindow.id });
+                    if (tabs && tabs.length > 0 && tabs[0].id === activeTabId) {
+                        await updateTime();
+                    } else {
+                        // Active tab doesn't match — pause tracking
+                        console.log("Heartbeat: active tab mismatch, pausing");
+                        await pauseTracking();
+                    }
+                } else {
+                    // No window focused
+                    await pauseTracking();
                 }
             } catch (e) {
-                // Window might be closed or error
+                // Window might be closed
             }
         }
     } else if (alarm.name === "sync_score") {
@@ -228,10 +305,20 @@ async function syncScoreToCloud() {
 }
 
 // Initialize on load to ensure we have an active tab ID if the service worker wakes up
-chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
     if (tabs && tabs.length > 0) {
         activeTabId = tabs[0].id;
         activeTabUrl = tabs[0].url;
-        startTime = Date.now();
+
+        // Check if the window is actually focused before starting the timer
+        try {
+            const win = await chrome.windows.getLastFocused();
+            isWindowFocused = win.focused;
+            if (isWindowFocused) {
+                startTime = Date.now();
+            }
+        } catch (e) {
+            startTime = Date.now(); // Fallback: assume focused
+        }
     }
 });

@@ -12,6 +12,7 @@ const CONFIG = {
         "hulu.com",
         "disneyplus.com"
     ],
+    DAILY_LIMIT: 3600, // 1 hour — doom meter fills up to this, streak resets if exceeded
     SHAME_TITLES: [
         { threshold: 0, title: "Productivity Saint" },
         { threshold: 300, title: "Casual Browser" }, // 5 mins

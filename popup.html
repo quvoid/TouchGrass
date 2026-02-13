@@ -4,19 +4,33 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reality Check</title>
+    <title>TouchGrass</title>
     <link rel="stylesheet" href="popup.css">
 </head>
 
 <body>
     <div class="container">
+        <!-- DOOM METER — fills as you waste time -->
+        <div id="doom-meter-container">
+            <div id="doom-bar"></div>
+        </div>
+
         <header>
-            <h1>TouchGrass 🌱</h1>
-            <div id="shame-title-container">
-                <span id="shame-badge">Calculating...</span>
+            <div class="header-top">
+                <h1>TouchGrass <span>🌱</span></h1>
+                <div id="streak-container">
+                    <span>🔥</span>
+                    <span id="streak-count">0</span>
+                    <span>day streak</span>
+                </div>
             </div>
+
+            <div id="shame-title-container">
+                <span id="shame-badge">INITIALIZING...</span>
+            </div>
+
             <div class="tabs">
-                <button class="tab-btn active" data-tab="personal">My Stats</button>
+                <button class="tab-btn active" data-tab="personal">Stats</button>
                 <button class="tab-btn" data-tab="global">Leaderboard</button>
             </div>
         </header>
@@ -24,30 +38,30 @@
         <main>
             <div id="personal-tab" class="tab-content active">
                 <div id="stats-container">
-                    <h2>Time Wasted Today</h2>
+                    <div class="section-header">
+                        <h2>Today</h2>
+                        <span class="total-time" id="total-wasted-display">0s</span>
+                    </div>
                     <ul id="site-list">
-                        <li class="loading">Calculating...</li>
+                        <li class="loading">Scanning...</li>
                     </ul>
                 </div>
             </div>
 
             <div id="global-tab" class="tab-content">
                 <div id="leaderboard-container">
-                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div class="section-header">
                         <h2>Global Rankings</h2>
-                        <button id="sync-btn" style="padding:2px 8px; font-size:10px;">↻ Sync</button>
+                        <button id="sync-btn">↻ Sync</button>
                     </div>
-                    <ul id="leaderboard-list">
-                        <!-- Mock data injected here -->
-                    </ul>
+                    <ul id="leaderboard-list"></ul>
                 </div>
             </div>
         </main>
 
         <footer>
-            <button id="test-roast-btn" style="margin-right: 10px; background: #00ff41; color: #000;">Test
-                Roast</button>
-            <button id="reset-btn">Reset Stats</button>
+            <button id="test-roast-btn">⚡ Roast Me</button>
+            <button id="reset-btn">Reset</button>
         </footer>
     </div>
     <script src="config.js"></script>

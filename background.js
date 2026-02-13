@@ -34,8 +34,31 @@ async function checkDailyReset() {
         // Sync the final totals from yesterday before wiping
         await syncScoreToCloud();
 
-        // Clear all daily domain keys but keep internal _keys
+        // --- STREAK LOGIC ---
+        // Calculate yesterday's total unproductive time before clearing
         const allData = await chrome.storage.local.get(null);
+        const badSites = (typeof CONFIG !== 'undefined') ? CONFIG.UNPRODUCTIVE_SITES : [];
+        const streakLimit = (typeof CONFIG !== 'undefined' && CONFIG.DAILY_LIMIT) ? CONFIG.DAILY_LIMIT : 3600;
+        let yesterdayWasted = 0;
+
+        for (const [key, value] of Object.entries(allData)) {
+            if (typeof value === 'number' && !key.startsWith('_') && !key.endsWith('_last_roast')) {
+                if (badSites.some(bad => key.includes(bad))) {
+                    yesterdayWasted += value;
+                }
+            }
+        }
+
+        const currentStreak = allData._streak_days || 0;
+        if (yesterdayWasted < streakLimit) {
+            await chrome.storage.local.set({ _streak_days: currentStreak + 1 });
+            console.log(`Streak incremented to ${currentStreak + 1} (yesterday: ${yesterdayWasted.toFixed(0)}s < ${streakLimit}s limit)`);
+        } else {
+            await chrome.storage.local.set({ _streak_days: 0 });
+            console.log(`Streak reset to 0 (yesterday: ${yesterdayWasted.toFixed(0)}s >= ${streakLimit}s limit)`);
+        }
+
+        // Clear all daily domain keys but keep internal _keys
         const keysToRemove = [];
         for (const key of Object.keys(allData)) {
             if (!key.startsWith('_')) {
@@ -373,6 +396,10 @@ async function initializeExtension() {
             }
         }
         await chrome.storage.local.set({ _lifetime_wasted: totalWasted });
+        // Also initialize streak if it doesn't exist
+        if (data._streak_days === undefined) {
+            await chrome.storage.local.set({ _streak_days: 0 });
+        }
         console.log(`Migration complete: _lifetime_wasted set to ${totalWasted.toFixed(0)}s`);
     }
 

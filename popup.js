@@ -1,10 +1,13 @@
-// popup.js
+// popup.js — TouchGrass v2.0
 
 document.addEventListener('DOMContentLoaded', async () => {
     const list = document.getElementById('site-list');
     const resetBtn = document.getElementById('reset-btn');
+    const doomBar = document.getElementById('doom-bar');
+    const totalWastedDisplay = document.getElementById('total-wasted-display');
+    const streakCountEl = document.getElementById('streak-count');
 
-    // Helper to format time
+    // --- HELPERS ---
     function formatTime(seconds) {
         if (seconds < 60) return `${Math.floor(seconds)}s`;
         const mins = Math.floor(seconds / 60);
@@ -14,19 +17,57 @@ document.addEventListener('DOMContentLoaded', async () => {
         return `${hrs}h ${remMins}m`;
     }
 
+    // --- DOOM METER ---
+    function updateDoomMeter(totalWastedTime) {
+        const limit = (typeof CONFIG !== 'undefined' && CONFIG.DAILY_LIMIT) ? CONFIG.DAILY_LIMIT : 3600; // 1hr default
+        const pct = Math.min(100, (totalWastedTime / limit) * 100);
+
+        doomBar.style.width = `${pct}%`;
+
+        // Remove previous severity classes
+        doomBar.classList.remove('warn', 'danger');
+
+        if (pct >= 75) {
+            doomBar.classList.add('danger');
+        } else if (pct >= 40) {
+            doomBar.classList.add('warn');
+        }
+        // else stays default green
+    }
+
+    // --- SHAME BADGE SEVERITY ---
+    function updateShameSeverity(totalWastedTime) {
+        const container = document.getElementById('shame-title-container');
+        container.classList.remove('level-safe', 'level-warn', 'level-danger');
+
+        if (totalWastedTime >= 3600) {
+            container.classList.add('level-danger');
+        } else if (totalWastedTime >= 900) {
+            container.classList.add('level-warn');
+        } else {
+            container.classList.add('level-safe');
+        }
+    }
+
+    // --- STREAK ---
+    async function loadStreak() {
+        const data = await chrome.storage.local.get(['_streak_days']);
+        const streak = data._streak_days || 0;
+        streakCountEl.innerText = streak;
+    }
+
+    // --- MAIN STATS ---
     async function loadStats() {
         const data = await chrome.storage.local.get(null);
         const sites = [];
         let totalWastedTime = 0;
 
-        // Use Config if available, else empty
         const badSites = (typeof CONFIG !== 'undefined') ? CONFIG.UNPRODUCTIVE_SITES : [];
 
         for (const [key, value] of Object.entries(data)) {
             if (typeof value === 'number' && !key.startsWith('_') && !key.endsWith('_last_roast')) {
                 sites.push({ domain: key, time: value });
 
-                // Check if this site matches our "bad" list
                 const isBad = badSites.some(bad => key.includes(bad));
                 if (isBad) {
                     totalWastedTime += value;
@@ -34,12 +75,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
 
-        // --- UPDATE TITLE ---
+        // Update shame badge title
         const titleContainer = document.getElementById('shame-badge');
         let currentTitle = "Productivity Saint";
 
         if (typeof CONFIG !== 'undefined') {
-            // Find the highest threshold met
             for (const item of CONFIG.SHAME_TITLES) {
                 if (totalWastedTime >= item.threshold) {
                     currentTitle = item.title;
@@ -48,18 +88,23 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         titleContainer.innerText = currentTitle;
-        // Color coding based on severity could go here
 
-        // --- RENDER LIST ---
-        // Sort by time desc
+        // Update severity styling
+        updateShameSeverity(totalWastedTime);
+
+        // Update doom meter
+        updateDoomMeter(totalWastedTime);
+
+        // Update total wasted display
+        totalWastedDisplay.innerText = formatTime(totalWastedTime);
 
         // Sort by time desc
         sites.sort((a, b) => b.time - a.time);
 
-        // Render
+        // Render list
         list.innerHTML = '';
         if (sites.length === 0) {
-            list.innerHTML = '<li class="loading">No data yet. Get back to work!</li>';
+            list.innerHTML = '<li class="loading">No data yet — go browse</li>';
             return;
         }
 
@@ -80,9 +125,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // --- RESET ---
     resetBtn.onclick = async () => {
-        if (confirm("Clear all stats?")) {
-            await chrome.storage.local.clear();
+        if (confirm("Clear all daily stats?")) {
+            // Only clear daily keys, preserve internal _keys
+            const data = await chrome.storage.local.get(null);
+            const keysToRemove = [];
+            for (const key of Object.keys(data)) {
+                if (!key.startsWith('_')) {
+                    keysToRemove.push(key);
+                }
+            }
+            if (keysToRemove.length > 0) {
+                await chrome.storage.local.remove(keysToRemove);
+            }
             loadStats();
         }
     };
@@ -97,7 +153,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             contents.forEach(c => c.classList.remove('active'));
 
             tab.classList.add('active');
-            const target = tab.dataset.tab; // personal or global
+            const target = tab.dataset.tab;
             document.getElementById(`${target}-tab`).classList.add('active');
 
             if (target === 'global') {
@@ -106,13 +162,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
     });
 
-    // Real Leaderboard Data via Supabase
+    // --- LEADERBOARD ---
     async function loadLeaderboard() {
         const list = document.getElementById('leaderboard-list');
-        list.innerHTML = '<li class="loading">Connect to Supabase...</li>';
+        list.innerHTML = '<li class="loading">Connecting...</li>';
 
         try {
-            // Fetch Top 50
             const response = await fetch(`${SUPABASE_URL}/rest/v1/leaderboard?select=*&order=wasted_time_seconds.desc&limit=50`, {
                 method: 'GET',
                 headers: SUPABASE_HEADERS
@@ -125,14 +180,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const competitors = await response.json();
 
-            // Get current user ID to highlight
             const syncData = await chrome.storage.sync.get(['user_id']);
             const myId = syncData.user_id;
 
             list.innerHTML = '';
 
             if (competitors.length === 0) {
-                list.innerHTML = '<li class="loading">No one is wasting time yet? Impossible.</li>';
+                list.innerHTML = '<li class="loading">Nobody here yet</li>';
                 return;
             }
 
@@ -159,23 +213,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 list.appendChild(li);
             });
 
-            // Add Username Input if not set or at bottom of list
             addUsernameInput();
 
         } catch (e) {
             console.error("Leaderboard load failed:", e);
-            list.innerHTML = `<li class="loading" style="color:red">Connection Failed.</li><li class="loading" style="font-size:10px">${e.message}</li>`;
+            list.innerHTML = `<li class="loading" style="color:#ff3333">Connection Failed</li><li class="loading">${e.message}</li>`;
         }
     }
 
+    // --- SYNC BTN ---
     const syncBtn = document.getElementById('sync-btn');
     if (syncBtn) {
         syncBtn.onclick = async () => {
             syncBtn.innerText = "...";
-            // Trigger background sync via message
             await chrome.runtime.sendMessage({ action: "FORCE_SYNC" });
-
-            // Wait a sec then reload list
             setTimeout(() => {
                 loadLeaderboard();
                 syncBtn.innerText = "↻ Sync";
@@ -183,6 +234,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         };
     }
 
+    // --- USERNAME INPUT ---
     function addUsernameInput() {
         const existing = document.getElementById('username-input-container');
         if (existing) return;
@@ -190,31 +242,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         const container = document.getElementById('leaderboard-container');
         const inputDiv = document.createElement('div');
         inputDiv.id = 'username-input-container';
-        inputDiv.style.marginTop = '10px';
-        inputDiv.style.textAlign = 'center';
-        inputDiv.style.display = 'flex';
-        inputDiv.style.gap = '5px';
 
         const input = document.createElement('input');
-        input.placeholder = "Enter your handle";
-        input.style.background = '#333';
-        input.style.border = '1px solid #555';
-        input.style.color = 'white';
-        input.style.padding = '5px';
-        input.style.flex = '1';
+        input.placeholder = "your handle";
 
         const saveBtn = document.createElement('button');
         saveBtn.innerText = "Save";
-        saveBtn.style.background = '#003300';
-        saveBtn.style.color = '#00ff41';
 
         saveBtn.onclick = async () => {
             const newName = input.value.trim();
             if (newName) {
                 await chrome.storage.sync.set({ username: newName });
-                // Trigger an immediate sync in background would be nice, 
-                // but for now wait for interval or manual sync logic if we added it.
-                alert("Username saved! It will update on next sync (approx 2 mins).");
+                saveBtn.innerText = "✓";
+                setTimeout(() => saveBtn.innerText = "Save", 1500);
             }
         };
 
@@ -222,27 +262,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         inputDiv.appendChild(saveBtn);
         container.appendChild(inputDiv);
 
-        // Pre-fill
         chrome.storage.sync.get(['username'], (data) => {
             if (data.username) input.value = data.username;
         });
     }
 
+    // --- TEST ROAST ---
     const testRoastBtn = document.getElementById('test-roast-btn');
     if (testRoastBtn) {
         testRoastBtn.onclick = async () => {
-            testRoastBtn.innerText = "Sending...";
+            testRoastBtn.innerText = "...";
 
             try {
                 const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
                 if (tab) {
                     if (tab.url.startsWith("chrome://") || tab.url.startsWith("edge://")) {
-                        alert("Cannot roast internal browser pages! Please try on a real website (e.g., example.com).");
-                        testRoastBtn.innerText = "Test Roast";
+                        alert("Can't roast browser pages. Try a real website.");
+                        testRoastBtn.innerText = "⚡ Roast Me";
                         return;
                     }
-
-                    console.log("Sending roast to tab:", tab.id);
 
                     try {
                         await chrome.tabs.sendMessage(tab.id, {
@@ -250,13 +288,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                             text: "You requested this roast. Now get back to work!"
                         });
                         testRoastBtn.innerText = "Sent!";
-                        setTimeout(() => testRoastBtn.innerText = "Test Roast", 2000);
+                        setTimeout(() => testRoastBtn.innerText = "⚡ Roast Me", 2000);
                     } catch (err) {
-                        console.warn("Message failed, trying to inject script:", err);
-                        testRoastBtn.innerText = "Injecting...";
-
                         try {
-                            // Script execution for robustness
                             await chrome.scripting.executeScript({
                                 target: { tabId: tab.id },
                                 files: ['content.js']
@@ -266,35 +300,33 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 files: ['content.css']
                             });
 
-                            // Retry message
                             setTimeout(async () => {
                                 try {
                                     await chrome.tabs.sendMessage(tab.id, {
                                         action: "ROAST",
                                         text: "You requested this roast. Now get back to work!"
                                     });
-                                    testRoastBtn.innerText = "Sent (Injected)!";
+                                    testRoastBtn.innerText = "Sent!";
                                 } catch (retryErr) {
-                                    console.error("Retry failed:", retryErr);
                                     testRoastBtn.innerText = "Failed";
-                                    alert("Failed to roast. Try refreshing the page.");
                                 }
+                                setTimeout(() => testRoastBtn.innerText = "⚡ Roast Me", 2000);
                             }, 500);
                         } catch (injectErr) {
-                            console.error("Injection failed:", injectErr);
                             testRoastBtn.innerText = "Failed";
-                            alert("Cannot inject into this page. Try a standard website.");
+                            setTimeout(() => testRoastBtn.innerText = "⚡ Roast Me", 2000);
                         }
                     }
-                } else {
-                    testRoastBtn.innerText = "No Tab?";
                 }
             } catch (e) {
                 console.error(e);
                 testRoastBtn.innerText = "Error";
+                setTimeout(() => testRoastBtn.innerText = "⚡ Roast Me", 2000);
             }
         };
     }
 
-    loadStats();
+    // --- INIT ---
+    await loadStreak();
+    await loadStats();
 });

@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const badSites = (typeof CONFIG !== 'undefined') ? CONFIG.UNPRODUCTIVE_SITES : [];
 
         for (const [key, value] of Object.entries(data)) {
-            if (typeof value === 'number' && !key.endsWith('_last_roast')) {
+            if (typeof value === 'number' && !key.startsWith('_') && !key.endsWith('_last_roast')) {
                 sites.push({ domain: key, time: value });
 
                 // Check if this site matches our "bad" list

@@ -15,6 +15,57 @@ let isWindowFocused = true; // Track if any browser window is focused
 const ROAST_THRESHOLD = 3600; // Roast after 1 hour (3600s)
 const ROAST_INTERVAL = 3600; // Roast every 1 hour (3600s)
 
+// --- DAILY RESET HELPERS ---
+function getTodayDateString() {
+    // Returns "YYYY-MM-DD" in local time
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+}
+
+// Check if the day has changed; if so, sync yesterday's data and reset daily stats
+async function checkDailyReset() {
+    const data = await chrome.storage.local.get(['_last_reset_date']);
+    const lastReset = data._last_reset_date;
+    const today = getTodayDateString();
+
+    if (lastReset && lastReset !== today) {
+        console.log(`New day detected (${lastReset} → ${today}). Syncing and resetting daily stats.`);
+
+        // Sync the final totals from yesterday before wiping
+        await syncScoreToCloud();
+
+        // Clear all daily domain keys but keep internal _keys
+        const allData = await chrome.storage.local.get(null);
+        const keysToRemove = [];
+        for (const key of Object.keys(allData)) {
+            if (!key.startsWith('_')) {
+                keysToRemove.push(key);
+            }
+        }
+        if (keysToRemove.length > 0) {
+            await chrome.storage.local.remove(keysToRemove);
+            console.log(`Cleared ${keysToRemove.length} daily domain keys.`);
+        }
+
+        // Update the reset date
+        await chrome.storage.local.set({ _last_reset_date: today });
+    } else if (!lastReset) {
+        // First run ever — just set today's date
+        await chrome.storage.local.set({ _last_reset_date: today });
+    }
+}
+
+// Helper: add delta to _lifetime_wasted for unproductive sites
+async function addToLifetime(hostname, delta) {
+    const badSites = (typeof CONFIG !== 'undefined') ? CONFIG.UNPRODUCTIVE_SITES : [];
+    const isBad = badSites.some(bad => hostname.includes(bad));
+    if (isBad && delta > 0) {
+        const data = await chrome.storage.local.get(['_lifetime_wasted']);
+        const lifetime = (data._lifetime_wasted || 0) + delta;
+        await chrome.storage.local.set({ _lifetime_wasted: lifetime });
+    }
+}
+
 // Helper to check if URL is unproductive
 function isUnproductive(url) {
     if (!url) return false;
@@ -31,6 +82,9 @@ function isUnproductive(url) {
 
 // Function to update time spent — only saves if actively tracking
 async function updateTime() {
+    // Check for daily reset before recording
+    await checkDailyReset();
+
     if (activeTabUrl && startTime) {
         const now = Date.now();
         const duration = (now - startTime) / 1000; // in seconds
@@ -47,6 +101,9 @@ async function updateTime() {
             const currentTotal = (data[hostname] || 0) + duration;
 
             await chrome.storage.local.set({ [hostname]: currentTotal });
+
+            // Also add to lifetime total for unproductive sites
+            await addToLifetime(hostname, duration);
 
             // Log for debugging
             console.log(`Updated time for ${hostname}: ${currentTotal.toFixed(1)}s (+${duration.toFixed(1)}s)`);
@@ -76,6 +133,10 @@ async function pauseTracking() {
                 const data = await chrome.storage.local.get([hostname]);
                 const currentTotal = (data[hostname] || 0) + duration;
                 await chrome.storage.local.set({ [hostname]: currentTotal });
+
+                // Also add to lifetime total for unproductive sites
+                await addToLifetime(hostname, duration);
+
                 console.log(`Paused tracking for ${hostname}: saved ${duration.toFixed(1)}s`);
             } catch (e) {
                 console.error("Error pausing tracking:", e);
@@ -252,18 +313,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 async function syncScoreToCloud() {
     try {
         console.log("Syncing score to cloud...");
-        // 1. Calculate Total Wasted Time
-        const data = await chrome.storage.local.get(null);
-        let totalWasted = 0;
 
-        const sites = (typeof CONFIG !== 'undefined') ? CONFIG.UNPRODUCTIVE_SITES : [];
-        for (const [key, value] of Object.entries(data)) {
-            if (typeof value === 'number' && !key.endsWith('_last_roast')) {
-                if (sites.some(bad => key.includes(bad))) {
-                    totalWasted += value;
-                }
-            }
-        }
+        // 1. Read lifetime wasted total (already maintained incrementally)
+        const data = await chrome.storage.local.get(['_lifetime_wasted']);
+        const totalWasted = data._lifetime_wasted || 0;
 
         // 2. Get Sync ID (User ID)
         const syncData = await chrome.storage.sync.get(['user_id', 'username']);
@@ -296,7 +349,7 @@ async function syncScoreToCloud() {
         if (!response.ok) {
             console.error("Sync failed:", await response.text());
         } else {
-            console.log("Sync success!");
+            console.log(`Sync success! Lifetime wasted: ${totalWasted.toFixed(0)}s`);
         }
 
     } catch (e) {
@@ -304,13 +357,34 @@ async function syncScoreToCloud() {
     }
 }
 
-// Initialize on load to ensure we have an active tab ID if the service worker wakes up
-chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+// --- MIGRATION + INIT ---
+// On startup: migrate old data to lifetime if needed, then check daily reset
+async function initializeExtension() {
+    // 1. Migration: if _lifetime_wasted doesn't exist, calculate it from existing data
+    const data = await chrome.storage.local.get(null);
+    if (data._lifetime_wasted === undefined) {
+        let totalWasted = 0;
+        const badSites = (typeof CONFIG !== 'undefined') ? CONFIG.UNPRODUCTIVE_SITES : [];
+        for (const [key, value] of Object.entries(data)) {
+            if (typeof value === 'number' && !key.startsWith('_') && !key.endsWith('_last_roast')) {
+                if (badSites.some(bad => key.includes(bad))) {
+                    totalWasted += value;
+                }
+            }
+        }
+        await chrome.storage.local.set({ _lifetime_wasted: totalWasted });
+        console.log(`Migration complete: _lifetime_wasted set to ${totalWasted.toFixed(0)}s`);
+    }
+
+    // 2. Check if we need a daily reset
+    await checkDailyReset();
+
+    // 3. Set up active tab tracking
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tabs && tabs.length > 0) {
         activeTabId = tabs[0].id;
         activeTabUrl = tabs[0].url;
 
-        // Check if the window is actually focused before starting the timer
         try {
             const win = await chrome.windows.getLastFocused();
             isWindowFocused = win.focused;
@@ -321,4 +395,6 @@ chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
             startTime = Date.now(); // Fallback: assume focused
         }
     }
-});
+}
+
+initializeExtension();
